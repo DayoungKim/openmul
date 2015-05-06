@@ -444,17 +444,18 @@ char *nbapi_fab_parse_nw_addr_to_str(struct flow * flow){
     //return nbapi_parse_cidr_to_str(flow->ip.nw_src, 32);
 }
 
-char *nbapi_parse_ipv6_nw_addr_to_str(struct flow *flow, struct flow *mask, int i){
+char *nbapi_parse_ipv6_nw_addr_to_str(struct flow *flow, struct flow *mask, char *s){
     char *ret = calloc(sizeof(char), 1000);
     char ip6_addr_str[INET6_ADDRSTRLEN];
     char ip6_mask_str[INET6_ADDRSTRLEN];
     struct ipv6_addr flow_addr;
     struct ipv6_addr mask_addr;
     int i_mask = 0;
+    int i;
 
     if (!ret) return NULL;
 
-    if( i == 0) {
+    if(!strncmp(s, "src", strlen(s))) {
         flow_addr = flow->ipv6.nw_src;
         mask_addr = mask->ipv6.nw_src;
     } else {
@@ -490,7 +491,7 @@ char *nbapi_parse_ipv6_nw_addr_to_str(struct flow *flow, struct flow *mask, int 
     return ret;
 }
 
-char *nbapi_parse_nw_addr_to_str(struct flow * flow, struct flow * mask, int i){
+char *nbapi_parse_nw_addr_to_str(struct flow * flow, struct flow * mask, char *s){
     char * ret = calloc(sizeof(char), 30);
     struct in_addr in_addr, in_mask;
     int i_mask = 0;
@@ -498,7 +499,7 @@ char *nbapi_parse_nw_addr_to_str(struct flow * flow, struct flow * mask, int i){
     memset(&in_mask, 0, sizeof(in_mask));
     if (!ret) return NULL;
     sprintf(ret, "-1");
-    if ( i == 0 ){
+    if(!strncmp(s, "src", strlen(s))) {
         if(!mask->ip.nw_src) return ret;
         in_addr.s_addr = flow->ip.nw_src & mask->ip.nw_src;
         in_mask.s_addr = mask->ip.nw_src;
