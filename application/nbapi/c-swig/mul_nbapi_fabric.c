@@ -1,6 +1,6 @@
 /*
  *  mul_nbapi_path.c: Mul Northbound Path Application for Mul Controller
- *  Copyright (C) 2012-2014, Dipjyoti Saikia <dipjyoti.saikia@gmail.com>
+ *  Copyright (C) 2013, Jun Woo Park (johnpa@gmail.com)
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -301,7 +301,7 @@ nbapi_fabric_route_dump(void *arg, char *buf){
                         ntohs(cofp_rl->src_link));
 	cofp_rl++;
     }
-    len--;
+    if(n_links!=0) len--;
     len += snprintf(nf_r->str_route+len, FAB_DFL_PBUF_SZ-len-1,"]");
     memcpy(&nf_r->src_host, &cofp_route->src_host, sizeof(cofp_route->src_host));
     memcpy(&nf_r->dst_host, &cofp_route->dst_host, sizeof(cofp_route->dst_host));

@@ -84,7 +84,7 @@ function version_ge {
 
 # Install OpenMUL
 function openmul {
-    echo "Building OpenMUL Controller..."
+    echo "Installing MUL Controller..."
 
     #cd $BUILD_DIR/
     #git clone https://github.com/openmul/openmul.git
@@ -100,7 +100,7 @@ function openmul {
         sudo pip install --upgrade pip
 
         sudo pip install -r python_req.txt
-        $install --force-yes python-daemon
+#        $install --force-yes python-daemon
 
     elif [ "$DIST" = "Fedora" ]; then
         $install flex bison yumex expect \
@@ -110,8 +110,10 @@ function openmul {
         $install python-pip
         sudo pip install --upgrade pip
 
+        cd openmul
+
         sudo pip install -r python_req.txt
-        $install python-daemon
+#        $install python-daemon
 
     else
         echo "Distribution other than Ubuntu/Debian/Fedora..."
@@ -121,9 +123,6 @@ function openmul {
     ./autogen.sh
     CFLAGS=`pkg-config --cflags glib-2.0` ./configure --with-vty=yes
     make
-    pushd ./application/nbapi/c-swig >> /dev/null
-    ./copy.sh
-    popd >> /dev/null
     #sudo make install
 }
 
@@ -133,41 +132,41 @@ function gui {
 
     # Pre-requisites
     # JDK
-    #sudo wget --no-cookies --no-check-certificate --header \
-    #"Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie" \
-    #"http://download.oracle.com/otn-pub/java/jdk/7u72-b14/jdk-7u72-linux-x64.tar.gz"
+    sudo wget --no-cookies --no-check-certificate --header \
+    "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie" \
+    "http://download.oracle.com/otn-pub/java/jdk/7u72-b14/jdk-7u72-linux-x64.tar.gz"
 
     #Install JDK
-    #sudo tar -xvf jdk-7*.tar.gz
-    #sudo mkdir /usr/lib/jvm
-    #sudo mv ./jdk1.7* /usr/lib/jvm/jdk1.7.0
-    #sudo update-alternatives --install "/usr/bin/java" "java" "/usr/lib/jvm/jdk1.7.0/bin/java" 1
-    #sudo update-alternatives --install "/usr/bin/javac" "javac" "/usr/lib/jvm/jdk1.7.0/bin/javac" 1
-    #sudo update-alternatives --install "/usr/bin/javaws" "javaws" "/usr/lib/jvm/jdk1.7.0/bin/javaws" 1
-    #sudo chmod a+x /usr/bin/java
-    #sudo chmod a+x /usr/bin/javac
-    #sudo chmod a+x /usr/bin/javaws
-    sudo apt-get install openjdk-7-jdk
+    sudo tar -xvf jdk-7*
+    sudo mkdir /usr/lib/jvm
+    sudo mv ./jdk1.7* /usr/lib/jvm/jdk1.7.0
+    sudo update-alternatives --install "/usr/bin/java" "java" "/usr/lib/jvm/jdk1.7.0/bin/java" 1
+    sudo update-alternatives --install "/usr/bin/javac" "javac" "/usr/lib/jvm/jdk1.7.0/bin/javac" 1
+    sudo update-alternatives --install "/usr/bin/javaws" "javaws" "/usr/lib/jvm/jdk1.7.0/bin/javaws" 1
+    sudo chmod a+x /usr/bin/java
+    sudo chmod a+x /usr/bin/javac
+    sudo chmod a+x /usr/bin/javaws
 
     #Install Tomcat
-    sudo wget http://apache.mirror.cdnetworks.com/tomcat/tomcat-8/v8.0.18/bin/apache-tomcat-8.0.18.tar.gz
-    sudo tar -xvzf apache-tomcat-8*.tar.gz
+    sudo wget http://apache.tt.co.kr/tomcat/tomcat-8/v8.0.15/bin/apache-tomcat-8.0.15.tar.gz
+    sudo tar -xvf apache-tomcat-8*
     sudo mv ./apache-tomcat-8.0*/ /opt/tomcat
 
-    sudo JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64 CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/./startup.sh 
+    export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
+    export CATALINA_HOME=/opt/tomcat
 
-    pushd ./application/gui >> /dev/null
+    sudo /opt/tomcat/bin/./startup.sh 
+
     sudo unzip ROOT.war -d ./ROOT 
-    sudo rm -fr /opt/tomcat/webapps/ROOT
+    sudo rm -r /opt/tomcat/webapps/ROOT
     sudo mv ROOT /opt/tomcat/webapps/
-    popd >> /dev/null
 
-    sudo JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64 CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/./startup.sh
+    sudo /opt/tomcat/bin/./startup.sh
 }
 
 
 function usage {
-    printf '\nUsage: %s [-aMG]\n\n' $(basename $0) >&2
+    printf '\nUsage: %s [-aM]\n\n' $(basename $0) >&2
 
     printf 'This install script attempts to install useful packages\n' >&2
     printf 'for OpenMUL.It should (hopefully) work on Ubuntu 11.10+\n' >&2

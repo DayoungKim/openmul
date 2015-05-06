@@ -1,6 +1,7 @@
 /*
- * mul_nbapi_flow.c: Mul Northbound Static Flow Application for Mul Controller
- * Copyright (C) 2012-2014, Dipjyoti Saikia (dipjyoti.saikia@gmail.com)
+ *  mul_nbapi_flow.c: Mul Northbound Static Flow Application for Mul Controller
+ *  Copyright (C) 2013, Jun Woo Park (johnpa@gmail.com)
+ *                      Dipjyoti Saikia (dipjyoti.saikia@gmail.com)
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -22,13 +23,277 @@
 #include "mul_nbapi_flow.h"
 #include "mul_nbapi_endian.h"
 
-void regist_nbapi_cb(char *addr_port)
-{
+void regist_nbapi_cb(char *addr_port){
     c_log_info("%s : %s",FN, addr_port);
     gui_server_list = g_slist_append(gui_server_list, addr_port); 
 }
+int add_static_flow(uint64_t datapath_id, uint8_t priority, char *barrier, char *stat,
+                    mul_act_mdata_t *mdata, int drop,
+                    char *dl_src, char *dl_dst, char *dl_type, char *dl_vlan, char *dl_vlan_pcp, char *mpls_label, char *mpls_tc, char *mpls_bos, char *nw_src, char *nw_src6, char *nw_dst, char *nw_dst6, char *nw_proto, char *nw_tos, char *tp_dst, char *tp_src, char *in_port, char *table_id){
+    struct flow *flow;
+    struct flow *mask;
+    void *actions = NULL;
+    size_t action_len = 0;
+    int ret = -1;
+    char *mac_str = NULL, *next = NULL;
+    struct prefix_ipv4 dst_p, src_p;
+    struct prefix_ipv6 dst_p6, src_p6;
+    struct ipv6_addr addr6;
+    uint32_t nmask;
+    int i = 0;
+    uint8_t version;
+    uint64_t flags;
+    
+    flow = calloc(1, sizeof(*flow));
+    assert(flow);
+    mask = calloc(1, sizeof(*mask));
+    assert(mask);
+    of_mask_set_no_dc(mask);
+    
+    version = c_app_switch_get_version_with_id(datapath_id);
 
-int
+    if (drop == 0) {
+        action_len = mul_app_act_len(mdata);
+        actions = mdata->act_base;
+    } else if ( drop == 1 ){
+        action_len = 0;
+    }
+
+    if (!strncmp(dl_src, "None", strlen(dl_src))) {
+        memset(flow->dl_src, 0, 6);
+        memset(mask->dl_src, 0, 6);
+    } else {
+        mac_str = (void *)dl_src;
+        for (i = 0; i < 6; i++){
+            flow->dl_src[i] = (uint8_t)strtoul(mac_str, &next, 16);
+            if(mac_str == next)
+                break;
+            mac_str = next +1;
+        }
+        if (i != 6) {
+            goto free_and_return;
+        }
+    }
+
+    if (!strncmp(dl_dst, "None", strlen(dl_dst))) {
+        memset(flow->dl_dst, 0, 6);
+        memset(mask->dl_dst, 0, 6);
+    } else {
+        mac_str = (void *)dl_dst;
+        for (i = 0; i < 6; i++){
+            flow->dl_dst[i] = (uint8_t)strtoul(mac_str, &next, 16);
+            if(mac_str == next)
+                break;
+            mac_str = next +1;
+        }
+        if (i != 6) {
+            goto free_and_return;
+        }
+    }
+
+    if (!strncmp(dl_type, "None", strlen(dl_type))){
+        flow->dl_type=0;
+        mask->dl_type=0;
+    } else {
+        flow->dl_type= htons((uint16_t)strtoull(dl_type, NULL, 16));
+    }
+
+    if (!strncmp(dl_vlan, "None", strlen(dl_vlan))){
+        flow->dl_vlan=0;
+        mask->dl_vlan=0;
+    } else {
+        flow->dl_vlan = htons(atoi(dl_vlan));
+    }
+
+    if (!strncmp(dl_vlan_pcp, "None", strlen(dl_vlan_pcp))){
+        flow->dl_vlan_pcp=0;
+        mask->dl_vlan_pcp=0;
+    } else {
+        if (flow->dl_vlan) flow->dl_vlan_pcp= atoi(dl_vlan_pcp);
+        else goto free_and_return;
+    }
+
+    if (!strncmp(mpls_label, "None", strlen(mpls_label))){
+        flow->mpls_label = 0;
+        mask->mpls_label = 0;
+    } else {
+        if(version == OFP_VERSION) goto free_and_return;
+        if(flow->dl_type == htons(ETH_TYPE_MPLS) ||
+            flow->dl_type == htons(ETH_TYPE_MPLS_MCAST)) {
+            flow->mpls_label = htonl(atoi(mpls_label));
+        } else goto free_and_return;
+    }
+
+    if (!strncmp(mpls_tc, "None", strlen(mpls_tc))){
+        flow->mpls_tc = 0;
+        mask->mpls_tc = 0;
+    } else {
+        if(version == OFP_VERSION) goto free_and_return;
+        if (flow->dl_type == htons(ETH_TYPE_MPLS) ||
+            flow->dl_type == htons(ETH_TYPE_MPLS_MCAST)) {
+            flow->mpls_tc = atoi(mpls_tc);
+        } else goto free_and_return;
+    }
+
+    if (!strncmp(mpls_bos, "None", strlen(mpls_bos))){
+        flow->mpls_bos = 0;
+        mask->mpls_bos = 0;
+    } else {
+        if(version == OFP_VERSION) goto free_and_return;
+        if (flow->dl_type == htons(ETH_TYPE_MPLS) ||
+            flow->dl_type == htons(ETH_TYPE_MPLS_MCAST)) {
+            flow->mpls_bos = atoi(mpls_tc);
+        } else goto free_and_return;
+    }
+
+    if(flow->dl_type == htons(ETH_TYPE_IPV6)) {
+        memset(&mask->ipv6, 0, sizeof(mask->ipv6));
+        if(!strncmp(nw_dst6, "None", strlen(nw_dst6))){
+            dst_p6.prefixlen=0;
+            memset(&dst_p6.prefix, 0, sizeof(dst_p6.prefix));
+        } else {
+            ret=str2prefix_ipv6(nw_dst6, (void *)&dst_p6);
+            if (ret <= 0) goto free_and_return;
+            if (dst_p6.prefixlen){
+                ipv6_addr_set(&addr6, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff);
+                ipv6_addr_prefix(&mask->ipv6.nw_dst, &addr6, dst_p6.prefixlen);
+            }
+        }
+        if(dst_p6.prefixlen)
+            ipv6_addr_prefix(&flow->ipv6.nw_dst, 
+                             (struct ipv6_addr *)&dst_p6.prefix, dst_p6.prefixlen);
+        if(!strncmp(nw_src6, "None", strlen(nw_src6))){
+            src_p6.prefixlen=0;
+            memset(&src_p6.prefix, 0, sizeof(src_p6.prefix));
+        } else {
+            ret=str2prefix_ipv6(nw_src6, (void *)&src_p6);
+            if (ret <= 0) goto free_and_return;
+            if (src_p6.prefixlen){
+                ipv6_addr_set(&addr6, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff);
+                ipv6_addr_prefix(&mask->ipv6.nw_src, &addr6, src_p6.prefixlen);
+            }
+        }
+        if(src_p6.prefixlen)
+            ipv6_addr_prefix(&flow->ipv6.nw_src, 
+                             (struct ipv6_addr *)&src_p6.prefix, src_p6.prefixlen);
+        ret = -1;
+    } else {
+        memset(&mask->ipv6, 0, sizeof(mask->ipv6));
+        if(!strncmp(nw_dst, "None", strlen(nw_dst))){
+            dst_p.prefixlen=0;
+            dst_p.prefix.s_addr=0;
+            nmask=0;
+        } else {
+            ret = str2prefix(nw_dst, (void *)&dst_p);
+            if(ret<=0) goto free_and_return;
+            if(dst_p.prefixlen){
+                if((flow->dl_type == htons(ETH_TYPE_IP)) ||
+                   (flow->dl_type == htons(ETH_TYPE_ARP))) {
+                    nmask = make_inet_mask(dst_p.prefixlen);
+                } else goto free_and_return;
+            } else nmask = 0;
+        }
+        mask->ip.nw_dst = htonl(nmask);
+        flow->ip.nw_dst = dst_p.prefix.s_addr & htonl(nmask);
+        if(!strncmp(nw_src, "None", strlen(nw_src))){
+            src_p.prefixlen=0;
+            src_p.prefix.s_addr=0;
+            nmask=0;
+        } else {
+            ret = str2prefix(nw_src, (void *)&src_p);
+            if(ret<=0) goto free_and_return;
+            if(src_p.prefixlen){
+                if((flow->dl_type == htons(ETH_TYPE_IP)) ||
+                   (flow->dl_type == htons(ETH_TYPE_ARP))) {
+                    nmask = make_inet_mask(src_p.prefixlen);
+                } else goto free_and_return;
+            } else nmask = 0;
+        }
+        mask->ip.nw_src = htonl(nmask);
+        flow->ip.nw_src = src_p.prefix.s_addr & htonl(nmask);
+
+        ret = -1;
+    }
+
+    if (!strncmp(nw_proto, "None", strlen(nw_proto))){
+        flow->nw_proto=0;
+        mask->nw_proto=0;
+    } else {
+        if (flow->dl_type == htons(ETH_TYPE_IPV6) ||
+            flow->dl_type == htons(ETH_TYPE_IP) ) {
+            flow->nw_proto = atoi(nw_proto);
+        } else goto free_and_return;
+    }
+
+    if (!strncmp(nw_tos, "None", strlen(nw_tos))){
+        flow->nw_tos = 0;
+        mask->nw_tos = 0;
+    } else {
+        if(flow->dl_type == htons(ETH_TYPE_IP)){
+            flow->nw_tos = atoi(nw_tos);
+        } else goto free_and_return;
+    }
+
+    if (!strncmp(tp_dst, "None", strlen(tp_dst))){
+        flow->tp_dst = 0;
+        mask->tp_dst = 0;
+    } else {
+        if(flow->nw_proto == IP_TYPE_UDP || flow->nw_proto == IP_TYPE_TCP) {
+            flow->tp_dst = htons(atoi(tp_dst));
+        } else goto free_and_return;
+    }
+
+    if (!strncmp(tp_src, "None", strlen(tp_src))){
+        flow->tp_src = 0;
+        mask->tp_src = 0;
+    } else {
+        if(flow->nw_proto == IP_TYPE_UDP || flow->nw_proto == IP_TYPE_TCP) {
+            flow->tp_src = htons(atoi(tp_src));
+        } else goto free_and_return;
+    }
+
+    if (!strncmp(in_port, "None", strlen(in_port))){
+        flow->in_port = 0;
+        mask->in_port = 0;
+    } else {
+        flow->in_port=htonl(atoi(in_port));
+    }
+
+    flow->table_id = atoi(table_id);
+
+    mask->tunnel_id = 0;
+    mask->metadata = 0;
+
+    flags = C_FL_ENT_STATIC;
+    if (!strncmp(barrier, "enable", strlen(barrier))){
+        flags |= C_FL_ENT_BARRIER;
+    }
+    if (!strncmp(stat, "enable", strlen(stat))){
+        flags |= C_FL_ENT_GSTATS;
+    }
+
+
+
+
+    mul_service_send_flow_add(nbapi_app_data->mul_service, datapath_id,
+                                flow, mask, 0xffffffff, 
+                                actions, action_len, 
+                                0, 0, priority, flags);
+
+    if (c_service_timed_wait_response(nbapi_app_data->mul_service) > 0) {
+        goto free_and_return;
+    }
+    ret = 0;
+
+free_and_return:
+    mul_app_act_free(mdata);
+    free(flow);
+    free(mask);
+    free(mdata);
+    return ret;
+}
+
+/*int
 add_static_flow(uint64_t datapath_id, 
                 struct flow *fl, struct flow *mask, 
                 uint8_t priority,
@@ -39,8 +304,6 @@ add_static_flow(uint64_t datapath_id,
     void *actions = NULL;
     size_t action_len = 0;
     int ret = 0;
-
-    if (!fl || !mask || !mdata) return -1;
 
     hton_flow(fl);
     hton_flow(mask);
@@ -62,11 +325,11 @@ add_static_flow(uint64_t datapath_id,
     ntoh_flow(fl);
 
     return ret;
-}
+}*/
 
 struct of_group_mod_params *
-prepare_add_group(char *group, char *type)
-{
+prepare_add_group(char *group,
+                  char *type){
     struct of_group_mod_params * g_parms;
 
     g_parms = calloc(1, sizeof(* g_parms));
@@ -136,6 +399,7 @@ int
 delete_static_flow(uint64_t datapath_id, 
                 struct flow *fl, struct flow *mask, 
                 uint16_t priority)
+
 {
     int ret = 0;
 
@@ -143,7 +407,7 @@ delete_static_flow(uint64_t datapath_id,
     /* Just pass params to Controller ML API interface */
 
     mul_service_send_flow_del(nbapi_app_data->mul_service, datapath_id,
-                              fl, mask, 0, priority, C_FL_ENT_STATIC, OFPG_ANY);
+                                fl, mask, 0, priority, C_FL_ENT_STATIC,OFPG_ANY);
 
     if (c_service_timed_wait_response(nbapi_app_data->mul_service) > 0) {
         c_log_err("%s: Failed to delete flow.", FN);
@@ -156,16 +420,13 @@ delete_static_flow(uint64_t datapath_id,
 char *
 nbapi_parse_mac_to_str(uint8_t *mac)
 {
-    char *ret = calloc(sizeof(char), 64);
+    char *ret = calloc(sizeof(char), 18);
     if (!ret) return NULL;
-
     sprintf(ret, "%02X:%02X:%02X:%02X:%02X:%02X", 
-            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     return ret;
 }
-
-char *nbapi_fab_parse_nw_addr_to_str(struct flow * flow)
-{
+char *nbapi_fab_parse_nw_addr_to_str(struct flow * flow){
     uint32_t nw_addr;
     char *ret;
 
@@ -177,8 +438,10 @@ char *nbapi_fab_parse_nw_addr_to_str(struct flow * flow)
     sprintf(ret, "%d.%d.%d.%d", (nw_addr >> 24) & 0xFF,
                                 (nw_addr >> 16) & 0xFF,
                                 (nw_addr >> 8) & 0xFF,
-                                 nw_addr& 0xFF);
+                                nw_addr& 0xFF);
     return ret;
+
+    //return nbapi_parse_cidr_to_str(flow->ip.nw_src, 32);
 }
 
 char *nbapi_parse_ipv6_nw_addr_to_str(struct flow *flow, struct flow *mask, int i){
@@ -191,7 +454,7 @@ char *nbapi_parse_ipv6_nw_addr_to_str(struct flow *flow, struct flow *mask, int 
 
     if (!ret) return NULL;
 
-    if( i == 1) {
+    if( i == 0) {
         flow_addr = flow->ipv6.nw_src;
         mask_addr = mask->ipv6.nw_src;
     } else {
@@ -265,16 +528,12 @@ parse_nw_addr(char * nw_addr_str)
     return nw_addr;
 }
 
-static void
-parse_mac(char * mac_str, uint8_t mac[OFP_ETH_ALEN])
+static void parse_mac(char * mac_str, uint8_t mac[OFP_ETH_ALEN])
 {
     sscanf(mac_str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
            mac, mac+1, mac+2, mac+3, mac+4, mac+5);
 }
-
-uint8_t
-nbapi_get_switch_version_with_id(uint64_t dpid)
-{
+uint8_t nbapi_get_switch_version_with_id(uint64_t dpid){
     return c_app_switch_get_version_with_id(dpid);
 }
 
@@ -286,11 +545,10 @@ nbapi_get_switch_version_with_id(uint64_t dpid)
 
 struct flow *
 nbapi_make_flow(char *smac, char *dmac, char *eth_type,
-                char *vid, char *vlan_pcp, char *mpls_label, char *mpls_tc,
+                   char *vid, char *vlan_pcp, char *mpls_label, char *mpls_tc,
                 char *mpls_bos, char * dip, char *sip, char *proto,
                 char *tos, char *dport, char *sport, char *inport,
-                char *table)
-{
+                char *table){
     struct flow *flow;
     int i = 0;
     char *mac_str = NULL, *next = NULL;
@@ -494,6 +752,17 @@ struct flow *
 nbapi_fabric_make_flow(char *nw_src_str, char *dl_src_str,
                        char *in_port_str)
 {
+    /*return nbapi_make_flow_mask(0, 0, 
+                                dl_src_str, "None", "None", 
+                                "None", "None", "None", "None",
+                                "None", "None", nw_src_str, "None", 
+                                "None", "None", "None", in_port_str,
+                                "None");*/
+    /*return nbapi_make_flow(dl_src_str, "0", "0",
+                           "0", "0", "0", "0",
+                           "0", "0", nw_src_str, "0",
+                           "0", "0", "0", in_port_str,
+                           "0");*/
     return nbapi_make_flow(dl_src_str, "None", "None",
                            "None", "None", "None", "None",
                            "None", "None", nw_src_str, "None",
@@ -508,18 +777,17 @@ nbapi_mdata_alloc(uint64_t dpid)
     struct mul_act_mdata        *mdata;
     mdata = calloc(1, sizeof(*mdata));
     mul_app_act_alloc(mdata);
-    if(mul_app_act_set_ctors(mdata, dpid))  {
-        c_log_err("%s : Switch does not exist!",FN);
+    if(mul_app_act_set_ctors(mdata, dpid)) 
+    {
+        c_log_err("%s : Switch does not exist!!!!!!!!!!!!!!!!!!!!!!!!",FN);
         mul_app_act_free(mdata);
         free(mdata);
-        return NULL;
+               return NULL;
     }
     return mdata;
 }              
-
 mul_act_mdata_t *
-nbapi_group_mdata_alloc(uint64_t dpid)
-{
+nbapi_group_mdata_alloc(uint64_t dpid){
     struct mul_act_mdata *mdata;
     mdata = calloc(1, sizeof(*mdata));
     of_mact_alloc(mdata);
@@ -532,10 +800,7 @@ nbapi_group_mdata_alloc(uint64_t dpid)
     }
     return mdata;
 }
-
-int
-nbapi_mdata_inst_write(mul_act_mdata_t* mdata)
-{
+int nbapi_mdata_inst_write(mul_act_mdata_t* mdata){
     if(mul_app_set_inst_write(mdata)){
         c_log_err("%s : can't set write instruction. ",FN);
         return -1;
@@ -543,19 +808,16 @@ nbapi_mdata_inst_write(mul_act_mdata_t* mdata)
     return 0;
 }          
 
-int
-nbapi_mdata_inst_apply(mul_act_mdata_t* mdata)
-{
-    if(mul_app_set_inst_apply(mdata)) {
+int nbapi_mdata_inst_apply(mul_act_mdata_t* mdata){
+    if(mul_app_set_inst_apply(mdata)){
         c_log_err("%s : can't set apply instruction. ",FN);
         return -1;
     }
     return 0;
 }
 
-int nbapi_mdata_inst_meter(mul_act_mdata_t * mdata, uint32_t meter)
-{
-    if (mul_app_inst_meter(mdata, meter)) {
+int nbapi_mdata_inst_meter(mul_act_mdata_t * mdata, uint32_t meter){
+    if(mul_app_inst_meter(mdata, meter)){
         c_log_err("%s : can't add meter. ",FN);
         return -1;
     }
@@ -685,8 +947,7 @@ nbapi_mdata_free(mul_act_mdata_t *mdata)
     }
 }
 void
-nbapi_flow_free(struct flow * flow)
-{
+nbapi_flow_free(struct flow * flow){
     if(flow != NULL){
         free(flow);
     }
@@ -1149,14 +1410,12 @@ static void
 make_flow_list(nbapi_switch_flow_list_t *list, c_ofp_flow_info_t *cofp_fi)
 {
     c_ofp_flow_info_t *cofp_arg;
-
     cofp_arg = calloc(1, ntohs(cofp_fi->header.length));
-    if (!cofp_arg) return;
-
     memcpy(cofp_arg, cofp_fi, ntohs(cofp_fi->header.length));
     ntoh_c_ofp_flow_info(cofp_arg);
     list->array = g_slist_prepend(list->array, cofp_arg);
 }
+
 
 static void
 nbapi_make_flow_list(void *list, void *cofp_fi)
@@ -1166,8 +1425,7 @@ nbapi_make_flow_list(void *list, void *cofp_fi)
 }
 
 static void
-make_group_list(nbapi_switch_group_list_t *list, c_ofp_group_mod_t *cofp_gm)
-{
+make_group_list(nbapi_switch_group_list_t *list, c_ofp_group_mod_t *cofp_gm){
     c_ofp_group_mod_t * cofp_arg;
     cofp_arg = calloc(1, ntohs(cofp_gm->header.length));
     memcpy(cofp_arg, cofp_gm, ntohs(cofp_gm->header.length));
@@ -1175,15 +1433,11 @@ make_group_list(nbapi_switch_group_list_t *list, c_ofp_group_mod_t *cofp_gm)
     list->array = g_slist_prepend(list->array, cofp_arg);
 }
 static void 
-nbapi_make_group_list(void *list, void *cofp_gm)
-{
+nbapi_make_group_list(void *list, void *cofp_gm){
     make_group_list((nbapi_switch_group_list_t *)list,
                     (c_ofp_group_mod_t *)cofp_gm);
 }
-
-nbapi_switch_group_list_t
-get_group(uint64_t datapath_id)
-{
+nbapi_switch_group_list_t get_group(uint64_t datapath_id){
     int n_groups;
     nbapi_switch_group_list_t list;
     uint8_t version;
@@ -1262,6 +1516,7 @@ nbapi_switch_flow_list_t get_flow(uint64_t datapath_id)
 {
     int n_flows;
     nbapi_switch_flow_list_t list;
+    //nbapi_switch_flow_list_t * list;
 
     list.array = NULL;
     list.length = 0;
@@ -1306,11 +1561,8 @@ get_single_flow(uint64_t datapath_id, struct flow *flow, struct flow *mask, uint
     return list;
 }
 
-int
-get_flow_number(uint64_t dpid)
-{
+int get_flow_number(uint64_t dpid){
     nbapi_switch_flow_list_t list;
-
     return mul_get_flow_info(nbapi_app_data->mul_service,
                                 dpid, 0, false, true, false,
                                 false, true, &list,
@@ -1333,6 +1585,7 @@ nbapi_dump_single_flow_action(c_ofp_flow_info_t *cofp_fi)
     }
 
     action_len = ntohs(cofp_fi->header.length) - sizeof(*cofp_fi);
+    //action_len = cofp_fi->header.length - sizeof(*cofp_fi);
     if (version == OFP_VERSION)
         pbuf = nbapi_of10_dump_actions(cofp_fi->actions, action_len);
     else if (version == OFP_VERSION_131)
@@ -1405,21 +1658,11 @@ nbapi_of_dump_act_out(struct ofp_action_header *action, void *arg)
 {
     struct ofp_action_output *of_ao = (void *)(action);
     struct ofp_inst_parser_arg *dp = arg;
-    uint16_t port = ntohs(of_ao->port);
 
-    if (port == OFPP_CONTROLLER)  {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "CONTROLLER");
-    } else if (port == OFPP_LOCAL)  {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "LOCAL");
-    } else {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
+    dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
                         "{'action':'%s','value':'%u'},",
-                        "OUTPUT", port);
-    }
+                        //"{'action':'%s','value':%u},",
+                        "OUTPUT", ntohs(of_ao->port));
     assert(dp->len < OF_DUMP_INST_SZ-1);
     return ntohs(action->len);
 }
@@ -1431,7 +1674,7 @@ nbapi_of_dump_act_set_vlan(struct ofp_action_header *action, void *arg)
     struct ofp_inst_parser_arg *dp = arg;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%d'}",//0x%04x'},",
+                        "{'action':'%s','value':'%d'},",//0x%04x'},",
                         "SET_VLAN_VID", ntohs(vid_act->vlan_vid));
     assert(dp->len < OF_DUMP_INST_SZ-1);
     return sizeof(*vid_act);
@@ -1444,7 +1687,8 @@ nbapi_of_dump_act_set_vlan_pcp(struct ofp_action_header *action, void *arg)
     struct ofp_inst_parser_arg *dp = arg;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
+//                        "{'action':'%s','value':'0x%04x'},", 
                         "SET_VLAN_PCP", vlan_pcp_act->vlan_pcp);
     assert(dp->len < OF_DUMP_INST_SZ-1);
     return sizeof(*vlan_pcp_act);
@@ -1540,7 +1784,7 @@ nbapi_of131_dump_goto_inst(struct ofp_instruction *inst, void *arg)
     struct ofp_inst_parser_arg *dp = arg;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'instruction':'%s','value':%d},", 
+                        "{'instruction':'%s','value':'%d'},", 
                         "GOTO_TABLE", ofp_ig->table_id);
     assert(dp->len < OF_DUMP_INST_SZ - 1);
 
@@ -1554,7 +1798,7 @@ nbapi_of131_dump_wr_meta_inst(struct ofp_instruction *inst, void *arg)
     struct ofp_inst_parser_arg *dp = arg;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - (dp->len) - 1,
-                        "{'type':'%s','metadata':0x%llx},",
+                        "{'type':'%s','metadata':'0x%llx'},",
                         "WRITE_METADATA",
                         U642ULL(ntohll(ofp_iwm->metadata)));
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1607,7 +1851,7 @@ nbapi_of131_dump_meter_inst(struct ofp_instruction *inst, void *arg)
     struct ofp_inst_parser_arg *dp = arg;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'instruction':'%s','value':%d},",
+                        "{'instruction':'%s','value':'%d'},",
                         "METER", ntohl(ofp_im->meter_id));
     assert(dp->len < OF_DUMP_INST_SZ-1);
     
@@ -1640,33 +1884,10 @@ nbapi_of131_dump_act_output(struct ofp_action_header *action, void *arg)
 {
     struct ofp131_action_output *of_ao = (void *)(action);
     struct ofp_inst_parser_arg *dp = arg;
-    uint32_t port = ntohl(of_ao->port);
 
-    if (port == OFPP131_CONTROLLER) {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "CONTROLLER");
-    } else if (port == OFPP131_LOCAL) {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "LOCAL");
-    } else if (port == OFPP131_ALL) {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "ALL");
-    } else if (port == OFPP131_FLOOD) {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "FLOOD");
-    } else if (port == OFPP131_NORMAL) {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':'%s'},",
-                        "OUTPUT", "NORMAL");
-    } else {
-        dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},", 
-                        "OUTPUT", port);
-    }
+    dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
+                        "{'action':'%s','value':'%u'},", 
+                        "OUTPUT", ntohl(of_ao->port));
     assert(dp->len < OF_DUMP_INST_SZ-1);
 
     return ntohs(action->len);
@@ -1746,7 +1967,7 @@ nbapi_of131_dump_set_queue(struct ofp_action_header *action, void *arg)
     struct ofp131_action_set_queue *ofp_sq = (void *)(action);
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         //"{'action':'%s','value':0x%x},",
                         "SET_QUEUE", ntohl(ofp_sq->queue_id));
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1760,7 +1981,7 @@ nbapi_of131_dump_set_nw_ttl(struct ofp_action_header *action, void *arg)
     struct ofp_action_nw_ttl *ofp_snt = (void *)(action);
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",//0x%x},",
+                        "{'action':'%s','value':'%d'},",//0x%x},",
                         "SET_NW_TTL", ofp_snt->nw_ttl);
     assert(dp->len < OF_DUMP_INST_SZ-1);
     return ntohs(action->len);
@@ -1784,7 +2005,7 @@ nbapi_of131_dump_set_mpls_ttl(struct ofp_action_header *action, void *arg)
     struct ofp_action_mpls_ttl *ofp_smt = (void *)(action);
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         //"{'action':'%s','value':0x%x},", 
                         "SET_MPLS_TTL", ofp_smt->mpls_ttl);
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1873,7 +2094,7 @@ nbapi_of131_dump_set_field_dl_type(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':0x%x},", 
+                        "{'action':'%s','value':'0x%x'},", 
                         "SET_ETH_TYPE", ntohs(dl_type));
     assert(dp->len < OF_DUMP_INST_SZ-1);
     
@@ -1889,7 +2110,7 @@ nbapi_of131_dump_set_field_dl_vlan(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         //"{'action':'%s','value':0x%x},", 
                         "SET_VLAN_VID", ntohs(*vid) & 0xfff);
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1905,7 +2126,7 @@ nbapi_of131_dump_set_field_dl_vlan_pcp(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         //"{'action':'%s','value':0x%x},", 
                         "SET_VLAN_PCP", *vlan_pcp);
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1923,7 +2144,7 @@ nbapi_of131_dump_set_field_mpls_label(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         //"{'action':'%s','value':0x%x},",
                         "SET_MPLS_LABEL", ntohl(label));
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1940,7 +2161,7 @@ nbapi_of131_dump_set_field_mpls_tc(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         //"{'action':'%s','value':0x%x},",
                         "SET_MPLS_TC", *tc);
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -1957,7 +2178,7 @@ nbapi_of131_dump_set_field_mpls_bos(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':0x%x},",
+                        "{'action':'%s','value':'0x%x'},",
                         "SET_MPLS_BOS", *bos);
     assert(dp->len < OF_DUMP_INST_SZ-1);
 
@@ -2016,7 +2237,7 @@ nbapi_of131_dump_set_field_ipv4_dscp(struct ofp_oxm_header *oxm, void *arg)
     if (OFP_OXM_GHDR_HM(oxm)) return -1;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':0x%x},",
+                        "{'action':'%s','value':'0x%x'},",
                         //"SET_IPV4_DSCP"
                         "SET_NW_TOS", dscp);
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -2075,7 +2296,7 @@ nbapi_of131_dump_set_field_tp_port(struct ofp_oxm_header *oxm, void *arg,
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
                         //"{'action':'%s','value':0x%x},", 
-                        "{'action':'%s','value':%d},",
+                        "{'action':'%s','value':'%d'},",
                         str, ntohs(port));
     assert(dp->len < OF_DUMP_INST_SZ-1);
 
@@ -2113,7 +2334,7 @@ nbapi_of131_dump_group_act(struct ofp_action_header *action, void *arg)
     struct ofp_inst_parser_arg *dp = arg;
 
     dp->len += snprintf(dp->pbuf + dp->len, OF_DUMP_INST_SZ - dp->len - 1,
-                        "{'action':'%s','value':%lu},",
+                        "{'action':'%s','value':'%lu'},",
                        //"{'action':'%s','value':%lu},",
                         "GROUP", U322UL(ntohl(grp_act->group_id)));
     assert(dp->len < OF_DUMP_INST_SZ-1);
@@ -2152,6 +2373,7 @@ struct ofp_act_parsers nbapi_of131_dump_act_parsers = {
     .act_cp_ttl_out = nbapi_of131_dump_cp_ttl_out,
     .act_cp_ttl_in = nbapi_of131_dump_cp_ttl_in,
     .act_set_field = nbapi_of131_dump_act_set_field,
+    //.act_setf_in_port = nbapi_of131_check_set_field_in_port,
     .act_setf_dl_dst = nbapi_of131_dump_set_field_dl_dst,
     .act_setf_dl_src = nbapi_of131_dump_set_field_dl_src,
     .act_setf_dl_type = nbapi_of131_dump_set_field_dl_type,
@@ -2213,3 +2435,7 @@ nbapi_of131_dump_actions(void *inst_list, size_t inst_len, bool acts_only)
     if (dp) free(dp);
     return pbuf;
 }
+
+
+
+

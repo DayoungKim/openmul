@@ -1,6 +1,6 @@
 /*
  *  mul_nbapi_fabric.h: Mul Northbound Fabric Manager API application headers
- *  Copyright (C) 2012-2014, Dipjyoti Saikia <dipjyoti.saikia@gmail.com>
+ *  Copyright (C) Kulcloud <engg@kulcloud.net>
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License

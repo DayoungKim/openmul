@@ -1,6 +1,6 @@
 /*
- * mul_nbapi_swig_helper.h: MUL Northbound API SWIG helper headers
- * Copyright (C) 2012-2014, Dipjyoti Saikia <dipjyoti.saikia@gmail.com> 
+ *  mul_nbapi_swig_helper.h: MUL Northbound API SWIG helper headers
+ *  Copyright (C) 2013, Junwoo Park (johnpa@gmail.com)
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -23,11 +23,11 @@
 
 #include "glib.h"
 
-#define MUL_NBAPI_GSLIST_STRUCT(TYPE, STRUCT_NAME)  \
-typedef struct mul_nbapi_swig_##TYPE##_list {       \
-    GSList *array;                                  \
-    size_t length;                                  \
-} STRUCT_NAME
+#define MUL_NBAPI_GSLIST_STRUCT(TYPE, STRUCT_NAME)       \
+    typedef struct mul_nbapi_swig_##TYPE##_list {       \
+        GSList *array;                                   \
+        size_t length;                                  \
+    } STRUCT_NAME
 
 
 #ifdef SWIG
@@ -63,8 +63,8 @@ typedef struct mul_nbapi_swig_##TYPE##_list {       \
     #define MUL_NBAPI_SWIG_TYPEMAP_GLIST_TO_PYLIST(TYPE,STRUCT_NAME)  
 #endif
 
-#define MUL_NBAPI_PYLIST_RETURN(TYPE,STRUCT_NAME)                \
-        MUL_NBAPI_GSLIST_STRUCT(TYPE,STRUCT_NAME);               \
+#define MUL_NBAPI_PYLIST_RETURN(TYPE,STRUCT_NAME)                        \
+        MUL_NBAPI_GSLIST_STRUCT(TYPE,STRUCT_NAME);                        \
         MUL_NBAPI_SWIG_TYPEMAP_GLIST_TO_PYLIST(TYPE,STRUCT_NAME)
 
 #endif

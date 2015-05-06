@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2013-2014, OpenMUL Foundation 
+# Copyright (C) 2013-2014, KulCloud Inc. Ltd.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -30,7 +30,6 @@ import shutil
 
 from tornado.options import define, options
 from logging.handlers import SysLogHandler
-from daemon import runner
 
 define("port", default=8181, help="run on the given port", type=int)
 define("debug", default=False)
@@ -61,12 +60,15 @@ class App(tornado.web.Application):
             (r"/1.0/topology/switch", SwitchHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/neighbor", TopologyHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)", SwitchHandler),
+            (r"/1.0/topology/switch/all", SwitchHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/port", SwitchHandler),
+            (r"/1.0/topology/switch/all/port", SwitchHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/port/([0-9]+)", SwitchHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/meter", TableFeatureHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/group", TableFeatureHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/table/([0-9]+)", TableFeatureHandler),
             (r"/1.0/topology/switch/(0x[0-9a-zA-Z]+)/limit", SwitchHandler),
+            (r"/1.0/flowtable/all/flow", FlowTableHandler),
             (r"/1.0/flowtable/(0x[0-9a-zA-Z]+)/flow", FlowTableHandler),
             (r"/1.0/flowtable/(0x[0-9a-zA-Z]+)/flow/([0-9a-fA-F-]+)", FlowTableHandler),
             (r"/1.0/flowtable/(0x[0-9a-zA-Z]+)/table/([0-9]+)", FlowTableHandler),
@@ -76,7 +78,8 @@ class App(tornado.web.Application):
             (r"/1.0/metertable/(0x[0-9a-zA-Z]+)/meter", MeterTableHandler),
             (r"/1.0/metertable/(0x[0-9a-zA-Z]+)/meter/([0-9]+)", MeterTableHandler),
             (r"/1.0/stats/switch/(0x[0-9a-zA-Z]+)/flow/([0-9a-fA-F-]+)", FlowTableHandler),#StatHandler),
-            (r"/1.0/stats/switch/(0x[0-9a-zA-Z]+)/port/([0-9]+)", StatHandler)
+            (r"/1.0/stats/switch/(0x[0-9a-zA-Z]+)/port/([0-9]+)", StatHandler),
+            (r"/1.0/stats/switch/(0x[0-9a-zA-Z]+)/port/all", StatHandler)
         ]
 #fabric api 
         from app.handler.fabric.route import RouteHandler
@@ -94,8 +97,8 @@ class App(tornado.web.Application):
             #(r"/1.0/fabric/subnet", SubnetHandler),#
             #(r"/1.0/fabric/subnet/([0-9]+)", SubnetHandler),#
             (r"/1.0/fabric/host", HostHandler),
-            (r"/1.0/fabric/tenant/([0-9a-zA-Z-]+)/network/([0-9a-zA-Z-]+)/host", HostHandler)
-            #(r"/1.0/fabric/tenant/([0-9a-zA-Z-]+)/network/([0-9a-zA-Z-]+)/host/([0-9a-zA-Z.]+)", HostHandler),
+            (r"/1.0/fabric/tenant/([0-9a-zA-Z-]+)/network/([0-9a-zA-Z-]+)/host", HostHandler),
+            (r"/1.0/fabric/tenant/([0-9a-zA-Z-]+)/network/([0-9a-zA-Z-]+)/host/([0-9a-zA-Z.]+)", HostHandler),
             #(r"/1.0/fabric/tenant/([0-9a-zA-Z]+)/network/([0-9a-zA-Z-]+)/tunnel", TunnelHandler),#
             #(r"/1.0/fabric/tenant/([0-9a-zA-Z]+)/network/([0-9a-zA-Z-]+)/tunnel/([0-9]+)", TunnelHandler),#
         ]
@@ -118,14 +121,28 @@ class App(tornado.web.Application):
             (r"/1.0/openstack/routers/([0-9a-zA-Z-]+)/ports", OSRoutersHandler),
             (r"/1.0/openstack/routers/([0-9a-zA-Z-]+)/ports/([0-9a-zA-Z-]+)", OSRoutersHandler)
         ]
+#ovsdb api
+        from app.handler.ovs.ovsmanager import OvsManagerHandler
+        from app.handler.ovs.ovsbridge import OvsBridgeHandler
+        from app.handler.ovs.ovsport import OvsPortHandler
+        from app.handler.ovs.ovscontroller import OvsControllerHandler
+        handlers +=[
+            (r"/1.0/ovsdb/manager", OvsManagerHandler),
+            #(r"/1.0/ovsdb/bridge", OvsBridgeHandler),
+            (r"/1.0/ovsdb/host/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/bridge/([0-9]+)", OvsBridgeHandler),
+            (r"/1.0/ovsdb/host/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/port/([0-9]+)", OvsPortHandler),
+            (r"/1.0/ovsdb/host/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/controller/([0-9]+)", OvsControllerHandler)
+        ]
 #gui api (just for gui)
         from app.handler.gui.dashboard import DashboardHandler
         from app.handler.gui.regist import RegistHandler
+#        from app.handelr.gui.beem import BeemHandler
         handlers += [
             (r"/1.0/dashboard", DashboardHandler),
             (r"/1.0/dashboard/appname", DashboardHandler),
             (r"/1.0/regist", RegistHandler),
-            (r"/1.0/regist/([0-9]+)", RegistHandler)
+            (r"/1.0/regist/([0-9]+)", RegistHandler)#,
+#    (r"/1.0/beem/actions", BeemHandler)
         ]
 
         tornado.web.Application.__init__(self, handlers, debug=True)
@@ -180,13 +197,9 @@ if __name__ == "__main__":
 #test for mul nbapi regist api
     #mul.regist_nbapi_cb("49.254.149.174:8080") #mul.regist_nbapi_cb("localhost:7171")
     tornado.options.parse_command_line()
+    app = Start()
     if any( ['start' in sys.argv, 'stop' in sys.argv, 'restart' in sys.argv] ):
-        app = Start()
-        app.stdin_path = '/dev/null'
-        app.stdout_path = '/dev/null'
-        app.stderr_path = '/dev/null'
-        daemon_runner = runner.DaemonRunner(app)
-        daemon_runner.do_action()
-    else:
-        app = Start()
-        app.run()
+        log = open('tonado.'+str(options.port)+'.log','a+')
+        ctx = daemon.DaemonContext(stdout=log, stderr=log, working_directory='.')
+        ctx.open()
+    app.run()

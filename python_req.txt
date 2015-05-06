@@ -1,5 +1,6 @@
-tornado==3.2.0
+tornado==4.1
 colander==1.0b1
 psutil==2.1.1
 pexpect==3.3
-python-daemon==1.5.5
+python-daemon==1.6
+daemon-runner==0.0.15

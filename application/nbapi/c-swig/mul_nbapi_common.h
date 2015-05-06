@@ -1,6 +1,6 @@
 /*
- * mul_nbapi_common.h: Mul Northbound API Common Library headers
- * Copyright (C) 2012-2014, Dipjyoti Saikia <dipjyoti.saikia@gmail.com> 
+ *  mul_nbapi_common.h: Mul Northbound API Common Library headers
+ *  Copyright (C) 2013, Jun Woo Park <johnpa@gmail.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -31,12 +31,9 @@
 #define NBAPI_SERVICE_NAME MUL_APP_NAME
 #define NBAPI_CONF_FILE "mulnbapi.conf"
 
-#define MUL_NB_TIMEO (2)
-
 typedef struct {
     c_rw_lock_t   lock;
     void          *base;
-    struct event  *nbapi_timer_event;
     mul_service_t *mul_service; /* Traffic-Routing Service Instance */
     mul_service_t *route_service; /* Route Service Instance */
     mul_service_t *fab_service; /* Fabric Service Instance */
@@ -50,5 +47,6 @@ extern struct mul_app_client_cb nbapi_app_cbs;
 GSList *gui_server_list;
 
 void nbapi_module_init(void *ctx);
+int set_port_stats(uint64_t dpid, bool enable);
 
 #endif

@@ -1,6 +1,6 @@
 /*
- * mul_nbapi_statistics.h: Mul Northbound Statistics API application headers
- * Copyright (C) 2012-2014, Dipjyoti Saikia <dipjyoti.saikia@gmail.com>
+ *  mul_nbapi_statistics.h: Mul Northbound Statistics API application headers
+ *  Copyright (C) 2013, Jun Woo Park <johnpa@gmail.com>
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -23,32 +23,45 @@
 #include "mul_nbapi_swig_helper.h"
 #include "mul_nbapi_flow.h"
 
+
 #ifdef SWIG
     %newobject nbapi_parse_bps_to_str;
     %newobject nbapi_parse_pps_to_str;
     %newobject show_port_stats;
+    %newobject show_port_stats131;
+    %newobject show_port_stats140;
     %newobject get_switch_statistics_all;
+
 #endif
 
-typedef struct Port_Stats {
+typedef struct Port_Stats{
     float  bps;
     float  pps;
 } Port_Stats_t;
 
+//MUL_NBAPI_PYLIST_RETURN(c_ofp_flow_info, nbapi_switch_flow_list_t)
+
 nbapi_switch_flow_list_t  get_switch_statistics_all(uint64_t datapath_id);
-Port_Stats_t *get_switch_statistics_port(uint64_t datapath_id, uint16_t port);
+//c_ofp_flow_info_t *get_flow_statistics(uint64_t datapath_id, struct flow *fl,
+//		uint32_t wildcards, uint16_t oport, uint16_t prio);
+Port_Stats_t  *get_switch_statistics_port(uint64_t datapath_id, uint32_t port);//, int type);
 
 char *nbapi_parse_bps_to_str(uint8_t *bps);
 char *nbapi_parse_pps_to_str(uint8_t *pps);
 
 struct c_ofp_switch_table_stats *get_table_stats(uint64_t dp_id, uint8_t tbl_id);
-int set_port_stats(uint64_t dpid, bool enable);
-struct ofp131_port_stats *show_port_stats (uint64_t dpid, uint32_t port_no);
+//struct ofp131_port_stats *get_port_stats(uint64_t dp_id, uint32_t port);
+//int set_port_stats(uint64_t dpid, bool enable);
+struct ofp_port_stats *show_port_stats(uint64_t dpid, uint32_t port_no);
+struct ofp131_port_stats *show_port_stats131 (uint64_t dpid, uint32_t port_no);
+struct ofp140_port_stats *show_port_stats140(uint64_t dpid, uint32_t port_no);
+uint16_t get_ofp140_port_stats_prop_type(struct ofp140_port_stats * ofp_ps);
+struct ofp_port_stats_prop_ethernet *show_ofp_port_stats_prop_ethernet(struct ofp140_port_stats *ofp_ps);
+struct ofp_port_stats_prop_optical *show_ofp_port_stats_prop_optical(struct ofp140_port_stats *ofp_ps);
 int get_switch_pkt_rx_rlim(uint64_t datapath_id);
 int get_switch_pkt_tx_rlim(uint64_t datapath_id);
 int nbapi_set_switch_pkt_rx_rlim(uint64_t datapath_id, uint32_t pps);
 int nbapi_set_switch_pkt_tx_rlim(uint64_t datapath_id, uint32_t pps);
 int nbapi_disable_switch_pkt_rx_rlim(uint64_t datapath_id);
 int nbapi_disable_switch_pkt_tx_rlim(uint64_t datapath_id);
-
 #endif

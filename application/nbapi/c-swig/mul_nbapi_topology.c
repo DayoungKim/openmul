@@ -1,6 +1,6 @@
 /*
  *  mul_nbapi_topology.c: Mul Northbound Topology API for Mul Controller
- *  Copyright (C) 2012-2014, Dipjyoti Saikia <dipjyoti.saikia@gmail.com>
+ *  Copyright (C) 2013, Jun Woo Park (johnpa@gmail.com)
  * 
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
