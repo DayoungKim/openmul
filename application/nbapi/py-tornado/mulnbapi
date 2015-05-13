@@ -121,18 +121,6 @@ class App(tornado.web.Application):
             (r"/1.0/openstack/routers/([0-9a-zA-Z-]+)/ports", OSRoutersHandler),
             (r"/1.0/openstack/routers/([0-9a-zA-Z-]+)/ports/([0-9a-zA-Z-]+)", OSRoutersHandler)
         ]
-#ovsdb api
-        from app.handler.ovs.ovsmanager import OvsManagerHandler
-        from app.handler.ovs.ovsbridge import OvsBridgeHandler
-        from app.handler.ovs.ovsport import OvsPortHandler
-        from app.handler.ovs.ovscontroller import OvsControllerHandler
-        handlers +=[
-            (r"/1.0/ovsdb/manager", OvsManagerHandler),
-            #(r"/1.0/ovsdb/bridge", OvsBridgeHandler),
-            (r"/1.0/ovsdb/host/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/bridge/([0-9]+)", OvsBridgeHandler),
-            (r"/1.0/ovsdb/host/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/port/([0-9]+)", OvsPortHandler),
-            (r"/1.0/ovsdb/host/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/controller/([0-9]+)", OvsControllerHandler)
-        ]
 #gui api (just for gui)
         from app.handler.gui.dashboard import DashboardHandler
         from app.handler.gui.regist import RegistHandler
