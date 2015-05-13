@@ -8,8 +8,6 @@ import re
 
 from app.lib import mul_nbapi as mul
 from app.handler.base import BaseHandler
-from app.handler.thread_pool import in_thread_pool, in_ioloop, blocking
-#from app.handler.ids import FlowHolder
 from tornado.web import asynchronous
 
 logger = logging.getLogger("FlowTableHandler")
@@ -40,29 +38,16 @@ class FlowTableHandler(BaseHandler):
         self.write("ok")
 
     @asynchronous
-    @in_thread_pool
     def post(self, dpid, flow_id=None):
         ret={}
         try:
             body=json.loads(self.request.body)
             if 'flows' in  body.keys():
-#                start=datetime.datetime.now()
                 r_list=[]
                 for b in body['flows']:
                     r_list.append(self.__add_flow(dpid, b))
                 logger.debug(len(r_list))
                 self.finish({'flows':r_list})
-#                total=datetime.datetime.now()-start
-#                self.finish({'flows':r_list})
-#                logger.debug("%10f"%(total.total_seconds()*1000))
-####
-#                self.__add_multiple_flows(dpid, body['flows'], self.finish)
-####
-#                r_list=[]
-#                for b in body['flows']:
-#                    self.__add_multiple_flows(dpid, b, r_list.append)
-#                logger.debug(len(r_list))
-#                self.finish({'flows':r_list})
             else:
                 if flow_id:
                     self.delete(dpid, flow_id)
@@ -76,28 +61,6 @@ class FlowTableHandler(BaseHandler):
             #logger.debug(ret)
             #self.finish(ret)
 
-    @in_thread_pool
-    def __add_multiple_flows(self, dpid, b_list, callback):
-        #start=datetime.datetime.now()
-###
-#        self.__blocking_add_flow(dpid, b_list, callback)
-###
-        r_list=[]
-        for b in b_list:
-            self.__blocking_add_flow(dpid, b, r_list.append)
-        #callback(r_list)
-#        total=datetime.datetime.now()-start
-#        logger.debug("%10f"%(total.total_seconds()*1000))
-        #self.finish({'flows':r_list})
-#        logger.debug(len(r_list))
-        callback({'flows':r_list})
-
-
-    @blocking
-    def __blocking_add_flow(self, dpid, b, callback):
-        callback(self.__add_flow(dpid, b))
- 
-    @blocking
     def __add_flow(self, dpid, requestbody):
         body=FlowSchema().deserialize(requestbody)
         #logger.debug(body)
