@@ -465,13 +465,13 @@ class FlowTableHandler(BaseHandler):
             if mask.tp_src   : ret.update({'tp_src'  : flow.tp_src})
 
         if flow.dl_type == 0x86dd:
-            nw_src = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, 0)
-            nw_dst = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, 1)
+            nw_src = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, "src")
+            nw_dst = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, "dst")
             if nw_dst != '-1' : ret.update({'nw_dst6' : nw_dst})
             if nw_src != '-1' : ret.update({'nw_src6' : nw_src})
         else:
-            nw_src = mul.nbapi_parse_nw_addr_to_str(flow, mask, 0)
-            nw_dst = mul.nbapi_parse_nw_addr_to_str(flow, mask, 1)
+            nw_src = mul.nbapi_parse_nw_addr_to_str(flow, mask, "src")
+            nw_dst = mul.nbapi_parse_nw_addr_to_str(flow, mask, "dst")
             if nw_dst != '-1' : ret.update({'nw_dst': nw_dst})
             if nw_src != '-1' : ret.update({'nw_src': nw_src})
         return ret
@@ -556,17 +556,17 @@ class FlowTableHandler(BaseHandler):
         dl_dst_mask = mul.nbapi_parse_mac_to_str(mask.dl_dst)
 
         if mask.dl_type and (flow.dl_type == 0x86dd):
-            nw_src = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, 0)
+            nw_src = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, "src")
             if nw_src == "-1":
                 nw_src = "----:----:----:----:----:----:----:---/80"
                 nw_src = str(nw_src).replace(":","").replace("/","")
-                nw_dst = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, 1)
+            nw_dst = mul.nbapi_parse_ipv6_nw_addr_to_str(flow, mask, "dst")
             if nw_dst == "-1":
                 nw_dst = "----:----:----:----:----:----:----:----/80"
                 nw_dst = str(nw_dst).replace(":","").replace("/","")
         else:
-            str_sip = mul.nbapi_parse_nw_addr_to_str(flow, mask, 0)
-            str_dip = mul.nbapi_parse_nw_addr_to_str(flow, mask, 1)
+            str_sip = mul.nbapi_parse_nw_addr_to_str(flow, mask, "src")
+            str_dip = mul.nbapi_parse_nw_addr_to_str(flow, mask, "dst")
             for sip in str(str_sip).replace("/",".").split("."):
                 nw_src += "%02x" % int(sip)
             for dip in str(str_dip).replace("/",".").split("."):
