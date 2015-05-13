@@ -807,18 +807,18 @@ fabric_module_init(void *base_arg)
                      C_APP_ALL_SW, C_APP_ALL_EVENTS,
                      0, NULL, &fab_app_cbs);
 
-    /* By default Host tracker feature will be disabled */
-    fab_ctx->fab_learning = FAB_PROXY_ARP_ENABLED;
+    /* By defualt Host tracker feature will be enabled */
+    fab_ctx->fab_learning = FAB_HOST_TRACKER_ENABLED;
     fp = fopen("/etc/mul/fabric.cfg","r");
     if( fp != NULL) {
-        c = fscanf(fp,"%s",fab_learn_str); 
+        c = fscanf(fp,"%s",fab_learn_str);
         if(c != EOF) {
             str = strtok(fab_learn_str, "=");
             if(!strcmp(str,"HOST_TRACKER")) {
                 str = strtok(NULL, "=");
 
-                if(!strcmp(str,"ON")) { 
-                    fab_ctx->fab_learning = FAB_HOST_TRACKER_ENABLED;
+                if(!strcmp(str,"OFF")) {
+                    fab_ctx->fab_learning = FAB_PROXY_ARP_ENABLED;
                 }
             }
 
